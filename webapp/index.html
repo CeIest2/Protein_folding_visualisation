@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Protein Folding Visualizer</title>
+    <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -15,7 +16,7 @@
         }
         
         .container {
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
@@ -37,106 +38,75 @@
             min-height: 100px;
         }
         
-        textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
+        textarea:focus { outline: none; border-color: #667eea; }
         
-        .info {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            font-size: 14px;
-            color: #666;
-        }
+        .info { display: flex; justify-content: space-between; margin: 10px 0; font-size: 14px; color: #666; }
         
-        .badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
+        .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
         .badge.valid { background: #d1fae5; color: #065f46; }
         .badge.invalid { background: #fee2e2; color: #991b1b; }
         .badge.processing { background: #fef3c7; color: #92400e; }
         .badge.completed { background: #d1fae5; color: #065f46; }
         
         button {
-            width: 100%;
-            padding: 14px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            margin-top: 10px;
-            transition: all 0.3s;
+            width: 100%; padding: 14px; background: #667eea; color: white;
+            border: none; border-radius: 6px; font-size: 16px; font-weight: 600;
+            cursor: pointer; margin-top: 10px; transition: all 0.3s;
         }
-        
-        button:hover:not(:disabled) {
-            background: #5568d3;
-            transform: translateY(-1px);
-        }
-        
-        button:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
+        button:hover:not(:disabled) { background: #5568d3; transform: translateY(-1px); }
+        button:disabled { background: #ccc; cursor: not-allowed; }
         
         .status-card {
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 8px;
-            margin-top: 20px;
-            display: none;
+            background: #f9fafb; padding: 20px; border-radius: 8px;
+            margin-top: 20px; display: none;
         }
-        
         .status-card.show { display: block; }
         
         .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: #e0e0e0;
-            border-radius: 3px;
-            overflow: hidden;
-            margin: 10px 0;
+            width: 100%; height: 6px; background: #e0e0e0;
+            border-radius: 3px; overflow: hidden; margin: 10px 0;
         }
-        
         .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.5s;
+            height: 100%; background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%; transition: width 0.5s;
         }
-        
-        .results {
-            margin-top: 20px;
-            display: none;
+
+        /* Styles pour le visualiseur */
+        .viewer-container {
+            margin-top: 30px;
+            display: none; /* Caché par défaut */
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
         }
+        .viewer-container.show { display: block; }
         
-        .results.show { display: block; }
-        
-        .result-item {
+        #mol-viewer {
+            width: 100%;
+            height: 500px;
             background: white;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 8px;
+            position: relative;
+        }
+
+        .controls {
+            padding: 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #ddd;
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            border: 1px solid #e0e0e0;
+            gap: 15px;
         }
-        
-        .result-item a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
+
+        input[type=range] {
+            flex-grow: 1;
+            cursor: pointer;
         }
-        
-        .result-item a:hover { text-decoration: underline; }
+
+        .step-label {
+            font-weight: bold;
+            min-width: 80px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -144,7 +114,7 @@
         <h1>🧬 Protein Folding Visualizer</h1>
         <p class="subtitle">Prédiction de structure avec ESMFold</p>
         
-        <textarea id="sequence" placeholder="Collez votre séquence protéique ici (10-1000 acides aminés)&#10;Exemple: MPGWFKKAWYGLASLLSFSSFILII"></textarea>
+        <textarea id="sequence" placeholder="Collez votre séquence ici... Exemple: MPGWFKKAWYGLASLLSFSSFILII"></textarea>
         
         <div class="info">
             <span id="length">Longueur: 0 aa</span>
@@ -164,15 +134,20 @@
             <p id="progressText" style="font-size: 14px; color: #666;">Initialisation...</p>
         </div>
         
-        <div id="results" class="results">
-            <h3 style="margin-bottom: 15px;">📊 Résultats</h3>
-            <div id="resultsList"></div>
+        <div id="viewerSection" class="viewer-container">
+            <div id="mol-viewer"></div>
+            <div class="controls">
+                <button id="playBtn" style="width: auto; padding: 8px 15px; margin: 0;">▶</button>
+                <span class="step-label" id="stepLabel">Etape 0</span>
+                <input type="range" id="stepSlider" min="0" max="0" value="0" step="1">
+            </div>
         </div>
     </div>
     
     <script>
         const API_URL = 'http://localhost:8000/api';
         
+        // Éléments DOM
         const sequenceInput = document.getElementById('sequence');
         const lengthDisplay = document.getElementById('length');
         const validDisplay = document.getElementById('valid');
@@ -182,11 +157,76 @@
         const statusBadge = document.getElementById('statusBadge');
         const progressFill = document.getElementById('progressFill');
         const progressText = document.getElementById('progressText');
-        const resultsDiv = document.getElementById('results');
-        const resultsList = document.getElementById('resultsList');
+        const viewerSection = document.getElementById('viewerSection');
+        const stepSlider = document.getElementById('stepSlider');
+        const stepLabel = document.getElementById('stepLabel');
+        const playBtn = document.getElementById('playBtn');
         
         let currentJobId = null;
+        let jobResults = null;
+        let viewer = null;
+        let isPlaying = false;
         
+        // Initialisation du viewer 3Dmol
+        function initViewer() {
+            if (!viewer) {
+                viewer = $3Dmol.createViewer(document.getElementById('mol-viewer'), {
+                    backgroundColor: 'white'
+                });
+            }
+        }
+
+        // Chargement d'une étape spécifique
+        async function loadStep(stepIndex) {
+            if (!jobResults || !jobResults.steps[stepIndex]) return;
+
+            const pdbUrl = jobResults.steps[stepIndex].pdb_url;
+            
+            // On récupère le contenu du PDB
+            // Note: on ajoute l'URL complète si besoin
+            const response = await fetch(`http://localhost:8000${pdbUrl}`);
+            const pdbData = await response.text();
+
+            viewer.clear();
+            viewer.addModel(pdbData, "pdb");
+            viewer.setStyle({}, {cartoon: {color: 'spectrum'}});
+            viewer.zoomTo();
+            viewer.render();
+
+            // Mise à jour UI
+            stepLabel.textContent = `Etape ${stepIndex + 1}/${jobResults.steps.length}`;
+        }
+
+        // Gestion du Slider
+        stepSlider.addEventListener('input', (e) => {
+            const step = parseInt(e.target.value);
+            loadStep(step);
+        });
+
+        // Gestion du bouton Play
+        playBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playBtn.textContent = isPlaying ? '⏸' : '▶';
+            
+            if (isPlaying) {
+                playAnimation();
+            }
+        });
+
+        function playAnimation() {
+            if (!isPlaying) return;
+            
+            let current = parseInt(stepSlider.value);
+            let next = current + 1;
+            
+            if (next >= jobResults.steps.length) next = 0; // Boucle
+            
+            stepSlider.value = next;
+            loadStep(next);
+            
+            setTimeout(playAnimation, 500); // Vitesse de l'animation
+        }
+
         // Validation en temps réel
         sequenceInput.addEventListener('input', () => {
             const seq = cleanSequence(sequenceInput.value);
@@ -201,7 +241,7 @@
                 validDisplay.className = 'badge valid';
                 foldBtn.disabled = false;
             } else {
-                validDisplay.textContent = seq.length < 10 ? '⚠ Trop court' : seq.length > 1000 ? '⚠ Trop long' : '✗ Invalide';
+                validDisplay.textContent = '✗ Invalide';
                 validDisplay.className = 'badge invalid';
                 foldBtn.disabled = true;
             }
@@ -212,6 +252,7 @@
             const sequence = cleanSequence(sequenceInput.value);
             foldBtn.disabled = true;
             foldBtn.textContent = '⏳ Lancement...';
+            viewerSection.classList.remove('show');
             
             try {
                 const response = await fetch(`${API_URL}/fold`, {
@@ -221,13 +262,17 @@
                 });
                 
                 const data = await response.json();
-                currentJobId = data.job_id;
-                
-                jobIdDisplay.textContent = currentJobId;
-                statusCard.classList.add('show');
-                resultsDiv.classList.remove('show');
-                
-                pollStatus();
+                if(data.status === "exists") {
+                     // Si le job existe déjà, on passe directement aux résultats
+                     currentJobId = data.job_id;
+                     loadResults();
+                } else {
+                    currentJobId = data.job_id;
+                    jobIdDisplay.textContent = currentJobId;
+                    statusCard.classList.add('show');
+                    pollStatus();
+                }
+
             } catch (error) {
                 alert('Erreur: ' + error.message);
                 foldBtn.disabled = false;
@@ -235,7 +280,6 @@
             }
         });
         
-        // Polling du statut
         async function pollStatus() {
             const interval = setInterval(async () => {
                 try {
@@ -250,65 +294,46 @@
                         clearInterval(interval);
                         statusBadge.textContent = '✓ Terminé';
                         statusBadge.className = 'badge completed';
-                        progressText.textContent = '✅ Folding terminé !';
                         loadResults();
-                        foldBtn.disabled = false;
-                        foldBtn.textContent = '🚀 Lancer le repliement';
                     } else if (status.status === 'failed') {
                         clearInterval(interval);
                         statusBadge.textContent = '✗ Échec';
                         statusBadge.className = 'badge invalid';
-                        progressText.textContent = 'Erreur: ' + status.error;
                         foldBtn.disabled = false;
                         foldBtn.textContent = '🚀 Lancer le repliement';
                     }
-                } catch (error) {
-                    console.error('Erreur polling:', error);
-                }
+                } catch (error) { console.error(error); }
             }, 2000);
         }
         
-        // Charger les résultats
         async function loadResults() {
             try {
                 const response = await fetch(`${API_URL}/results/${currentJobId}`);
-                const data = await response.json();
+                jobResults = await response.json();
                 
-                resultsList.innerHTML = '';
+                // Préparer la visualisation
+                initViewer();
+                viewerSection.classList.add('show');
                 
-                const info = document.createElement('div');
-                info.className = 'result-item';
-                info.innerHTML = `
-                    <div>
-                        <strong>Séquence:</strong> ${data.sequence.substring(0, 40)}... (${data.sequence.length} aa)<br>
-                        <strong>pLDDT moyen:</strong> ${data.steps[0].avg_plddt.toFixed(2)}
-                    </div>
-                `;
-                resultsList.appendChild(info);
+                // Configurer le slider
+                stepSlider.max = jobResults.steps.length - 1;
+                stepSlider.value = jobResults.steps.length - 1; // Aller à la fin directement
                 
-                data.steps.forEach(step => {
-                    const item = document.createElement('div');
-                    item.className = 'result-item';
-                    item.innerHTML = `
-                        <span>📄 Étape ${step.step + 1}/${data.steps.length}</span>
-                        <a href="${step.pdb_url}" download>Télécharger PDB</a>
-                    `;
-                    resultsList.appendChild(item);
-                });
+                // Charger la structure finale
+                loadStep(jobResults.steps.length - 1);
                 
-                resultsDiv.classList.add('show');
-            } catch (error) {
-                console.error('Erreur chargement résultats:', error);
-            }
+                // Réactiver le bouton
+                foldBtn.disabled = false;
+                foldBtn.textContent = '🚀 Lancer le repliement';
+                
+                // Scroller vers le viewer
+                setTimeout(() => viewerSection.scrollIntoView({behavior: 'smooth'}), 100);
+
+            } catch (error) { console.error('Erreur résultats:', error); }
         }
         
-        function cleanSequence(seq) {
-            return seq.toUpperCase().replace(/\s+/g, '').replace(/\n/g, '');
-        }
-        
-        function isValid(seq) {
-            return /^[ACDEFGHIKLMNPQRSTVWY]+$/.test(seq);
-        }
+        function cleanSequence(seq) { return seq.toUpperCase().replace(/[^A-Z]/g, ''); }
+        function isValid(seq) { return /^[ACDEFGHIKLMNPQRSTVWY]+$/.test(seq); }
     </script>
 </body>
 </html>

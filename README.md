@@ -1,192 +1,116 @@
 # 🧬 Protein Folding Visualizer
 
-Visualisation interactive du processus de repliement protéique avec ESMFold.
+An interactive web application for real-time protein structure prediction and visualization. It leverages **ESMFold** AI (Meta AI) to generate 3D structures and **3Dmol.js** for in-browser visualization.
 
-## 📋 Prérequis
+## ✨ Features
 
-- Docker avec support GPU (NVIDIA Docker)
-- NVIDIA GPU avec CUDA 11.8+
-- WSL2 (si sous Windows)
+* **AI-Powered Prediction**: Generate PDB structures from amino acid sequences using ESMFold
+* **Interactive 3D Visualization**: Rotate, zoom, and explore protein structures in real-time
+* **Folding Animation**: Watch proteins fold step-by-step through the model's "recycle" iterations
+* **Intuitive Controls**: Interactive slider with automatic playback (Play/Pause)
 
-## 🚀 Démarrage rapide
+## 📋 Prerequisites
 
-### 1. Structure du projet
+* **System**: Windows 10/11 with **WSL2** installed (Ubuntu recommended)
+* **GPU**: NVIDIA graphics card with Windows drivers installed
+* **Python**: Version 3.10 or higher (within WSL)
 
-Créez la structure suivante :
+## 🚀 Installation (WSL)
 
+Open your WSL terminal, navigate to the project directory, and follow these steps:
+
+### 1. Create Virtual Environment
+
+Isolate project dependencies:
+```bash
+# Create environment named "venv"
+python3 -m venv venv
+
+# Activate the environment
+source venv/bin/activate
 ```
-protein-folding-viz/
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── api/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── routes/
-│   │   ├── __init__.py
-│   │   └── folding.py
-│   └── services/
-│       ├── __init__.py
-│       └── fold_engine.py
-├── webapp/
-│   ├── index.html
+
+### 2. Install PyTorch (GPU Support)
+
+This is the most critical step. Install a version compatible with CUDA 12.x:
+```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+### 3. Install Project Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Verify GPU Access
+
+Check that PyTorch can detect your NVIDIA GPU:
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
+Expected output: `True`
+
+## 🎯 Usage
+
+### Start the Application
+```bash
+python app.py
+```
+
+The server will start at `http://localhost:5000`
+
+### How to Use
+
+1. **Enter a Sequence**: Paste an amino acid sequence (single-letter codes: A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y)
+2. **Predict Structure**: Click "Predict Structure" and wait for processing
+3. **Explore the Model**: Use mouse controls to rotate and zoom the 3D structure
+4. **Watch Folding**: Use the timeline slider or Play button to animate the folding process
+
+## 📁 Project Structure
+```
+protein-folding-visualizer/
+├── app.py                 # Flask backend server
+├── requirements.txt       # Python dependencies
+├── templates/
+│   └── index.html        # Frontend interface
+├── static/
 │   ├── css/
-│   │   └── styles.css
+│   │   └── style.css     # Styles
 │   └── js/
-│       ├── api-client.js
-│       └── app.js
-└── data/
-    └── outputs/
+│       └── main.js       # Client-side logic
+└── README.md             # This file
 ```
 
-### 2. Construction de l'image Docker
+## 🔧 Troubleshooting
 
-```bash
-# Dans le dossier racine du projet
-docker-compose build
-```
+**CUDA not available**
+- Verify NVIDIA drivers are installed on Windows
+- Ensure WSL2 has GPU passthrough enabled
+- Check CUDA version compatibility with PyTorch
 
-⏱️ **Attention** : La première construction prend 10-15 minutes car le modèle ESMFold (~15GB) est téléchargé.
+**Out of memory errors**
+- Try shorter sequences (< 400 amino acids)
+- Close other GPU-intensive applications
+- Reduce the number of recycles in the model configuration
 
-### 3. Lancement du conteneur
+**Slow predictions**
+- First prediction downloads the model (~700MB) and may take time
+- Subsequent predictions are much faster
+- Consider using a more powerful GPU for longer sequences
 
-```bash
-docker-compose up
-```
+## 📚 Technologies
 
-L'API sera accessible sur : **http://localhost:8000**
+* **Backend**: Flask (Python)
+* **AI Model**: ESMFold (Meta AI)
+* **3D Rendering**: 3Dmol.js
+* **Deep Learning**: PyTorch with CUDA support
 
-### 4. Tester l'API
+## 📝 License
 
-#### Option A : Via l'interface web
-Ouvrez votre navigateur : http://localhost:8000
+This project is provided as-is for educational and research purposes.
 
-#### Option B : Via curl
-```bash
-# Lancer un folding
-curl -X POST http://localhost:8000/api/fold \
-  -H "Content-Type: application/json" \
-  -d '{"sequence": "MPGWFKKAWYGLASLLSFSSFILIIVALVVPHWLSGKILCQTGV"}'
+## 🙏 Acknowledgments
 
-# Récupérer le statut (remplacez JOB_ID)
-curl http://localhost:8000/api/status/JOB_ID
-
-# Récupérer les résultats
-curl http://localhost:8000/api/results/JOB_ID
-```
-
-#### Option C : Via la documentation auto-générée
-http://localhost:8000/docs
-
-## 📁 Résultats
-
-Les fichiers PDB générés sont sauvegardés dans :
-```
-data/outputs/
-└── {job_id}/
-    ├── metadata.json
-    ├── step_0.pdb
-    ├── step_1.pdb
-    ├── ...
-    └── step_7.pdb
-```
-
-## 🔍 Vérifications
-
-### 1. Vérifier que CUDA fonctionne
-```bash
-docker exec -it protein-folding-viz python -c "import torch; print('CUDA:', torch.cuda.is_available())"
-```
-Doit afficher : `CUDA: True`
-
-### 2. Vérifier les logs
-```bash
-docker-compose logs -f
-```
-
-### 3. Health check
-```bash
-curl http://localhost:8000/health
-```
-
-## 🛠️ Dépannage
-
-### Erreur : "could not select device driver"
-Vérifiez que NVIDIA Docker est installé :
-```bash
-docker run --rm --gpus all nvidia/cuda:11.8.0-base-ubuntu22.04 nvidia-smi
-```
-
-### Erreur : "Port 8000 already in use"
-Changez le port dans `docker-compose.yml` :
-```yaml
-ports:
-  - "8001:8000"  # Au lieu de 8000:8000
-```
-
-### Le modèle se télécharge à chaque démarrage
-Le cache Hugging Face devrait persister, mais si ce n'est pas le cas, ajoutez un volume :
-```yaml
-volumes:
-  - ~/.cache/huggingface:/root/.cache/huggingface
-```
-
-## 📊 Performance attendue
-
-Pour une protéine de 232 acides aminés :
-- **Temps de calcul** : ~20-40 secondes (selon GPU)
-- **Recycles générés** : 8 étapes
-- **Taille des PDB** : ~50-100 KB chacun
-
-## 🔄 Redémarrage
-
-```bash
-# Arrêter
-docker-compose down
-
-# Redémarrer
-docker-compose up
-
-# Reconstruire si modifications du code
-docker-compose up --build
-```
-
-## 🧹 Nettoyage
-
-```bash
-# Supprimer les conteneurs
-docker-compose down
-
-# Supprimer les images
-docker-compose down --rmi all
-
-# Supprimer les volumes
-docker-compose down -v
-```
-
-## 🎯 Prochaines étapes
-
-- ✅ **Étape 1** : Setup Docker + API minimale (TERMINÉE)
-- 🔄 **Étape 2** : Extraction complète des données (pLDDT, etc.)
-- 📊 **Étape 3** : API complète avec tous les endpoints
-- 🎨 **Étape 4** : Visualisation 3D avec 3DMol.js
-- 🎮 **Étape 5** : Contrôles interactifs (slider, play/pause)
-- 🌈 **Étape 6** : Mode "Confidence coloring"
-
-## 📝 Notes pour l'intégration Angular
-
-Le fichier `webapp/js/api-client.js` est conçu pour être facilement porté en TypeScript/Angular. 
-
-Structure Angular recommandée :
-```typescript
-// protein-folding.service.ts
-@Injectable({ providedIn: 'root' })
-export class ProteinFoldingService {
-  constructor(private http: HttpClient) {}
-  // Reprendre les méthodes de api-client.js
-}
-```
-
-## 📄 Licence
-
-MIT
+* Meta AI for the ESMFold model
+* 3Dmol.js team for the visualization library

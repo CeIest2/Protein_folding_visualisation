@@ -1,3 +1,32 @@
-/venv/
-\venv
+# Données générées
+data/outputs/*
+!data/outputs/.gitkeep
 
+# Python
+__pycache__/
+__init__.py
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Docker
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Hugging Face cache (optionnel)
+.cache/

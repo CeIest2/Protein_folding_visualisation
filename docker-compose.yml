@@ -10,6 +10,7 @@ services:
       - ./data:/app/data
       - ./api:/app/api
       - ./webapp:/app/webapp
+      - huggingface-cache:/root/.cache/huggingface
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - PYTHONUNBUFFERED=1
@@ -28,3 +29,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  huggingface-cache:

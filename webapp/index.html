@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protein Folding Visualizer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        h1 { color: #333; margin-bottom: 10px; }
+        .subtitle { color: #666; margin-bottom: 30px; }
+        
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 13px;
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .info {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge.valid { background: #d1fae5; color: #065f46; }
+        .badge.invalid { background: #fee2e2; color: #991b1b; }
+        .badge.processing { background: #fef3c7; color: #92400e; }
+        .badge.completed { background: #d1fae5; color: #065f46; }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+        
+        button:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status-card {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .status-card.show { display: block; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.5s;
+        }
+        
+        .results {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .results.show { display: block; }
+        
+        .result-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .result-item a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .result-item a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧬 Protein Folding Visualizer</h1>
+        <p class="subtitle">Prédiction de structure avec ESMFold</p>
+        
+        <textarea id="sequence" placeholder="Collez votre séquence protéique ici (10-1000 acides aminés)&#10;Exemple: MPGWFKKAWYGLASLLSFSSFILII"></textarea>
+        
+        <div class="info">
+            <span id="length">Longueur: 0 aa</span>
+            <span id="valid" class="badge"></span>
+        </div>
+        
+        <button id="foldBtn" disabled>🚀 Lancer le repliement</button>
+        
+        <div id="statusCard" class="status-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <strong>Job ID: <span id="jobId">-</span></strong>
+                <span id="statusBadge" class="badge processing">En cours</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressText" style="font-size: 14px; color: #666;">Initialisation...</p>
+        </div>
+        
+        <div id="results" class="results">
+            <h3 style="margin-bottom: 15px;">📊 Résultats</h3>
+            <div id="resultsList"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:8000/api';
+        
+        const sequenceInput = document.getElementById('sequence');
+        const lengthDisplay = document.getElementById('length');
+        const validDisplay = document.getElementById('valid');
+        const foldBtn = document.getElementById('foldBtn');
+        const statusCard = document.getElementById('statusCard');
+        const jobIdDisplay = document.getElementById('jobId');
+        const statusBadge = document.getElementById('statusBadge');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const resultsDiv = document.getElementById('results');
+        const resultsList = document.getElementById('resultsList');
+        
+        let currentJobId = null;
+        
+        // Validation en temps réel
+        sequenceInput.addEventListener('input', () => {
+            const seq = cleanSequence(sequenceInput.value);
+            lengthDisplay.textContent = `Longueur: ${seq.length} aa`;
+            
+            if (seq.length === 0) {
+                validDisplay.textContent = '';
+                validDisplay.className = 'badge';
+                foldBtn.disabled = true;
+            } else if (isValid(seq) && seq.length >= 10 && seq.length <= 1000) {
+                validDisplay.textContent = '✓ Valide';
+                validDisplay.className = 'badge valid';
+                foldBtn.disabled = false;
+            } else {
+                validDisplay.textContent = seq.length < 10 ? '⚠ Trop court' : seq.length > 1000 ? '⚠ Trop long' : '✗ Invalide';
+                validDisplay.className = 'badge invalid';
+                foldBtn.disabled = true;
+            }
+        });
+        
+        // Lancer le folding
+        foldBtn.addEventListener('click', async () => {
+            const sequence = cleanSequence(sequenceInput.value);
+            foldBtn.disabled = true;
+            foldBtn.textContent = '⏳ Lancement...';
+            
+            try {
+                const response = await fetch(`${API_URL}/fold`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sequence })
+                });
+                
+                const data = await response.json();
+                currentJobId = data.job_id;
+                
+                jobIdDisplay.textContent = currentJobId;
+                statusCard.classList.add('show');
+                resultsDiv.classList.remove('show');
+                
+                pollStatus();
+            } catch (error) {
+                alert('Erreur: ' + error.message);
+                foldBtn.disabled = false;
+                foldBtn.textContent = '🚀 Lancer le repliement';
+            }
+        });
+        
+        // Polling du statut
+        async function pollStatus() {
+            const interval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_URL}/status/${currentJobId}`);
+                    const status = await response.json();
+                    
+                    const percent = (status.progress / status.total_steps) * 100;
+                    progressFill.style.width = `${percent}%`;
+                    progressText.textContent = `Étape ${status.progress}/${status.total_steps}`;
+                    
+                    if (status.status === 'completed') {
+                        clearInterval(interval);
+                        statusBadge.textContent = '✓ Terminé';
+                        statusBadge.className = 'badge completed';
+                        progressText.textContent = '✅ Folding terminé !';
+                        loadResults();
+                        foldBtn.disabled = false;
+                        foldBtn.textContent = '🚀 Lancer le repliement';
+                    } else if (status.status === 'failed') {
+                        clearInterval(interval);
+                        statusBadge.textContent = '✗ Échec';
+                        statusBadge.className = 'badge invalid';
+                        progressText.textContent = 'Erreur: ' + status.error;
+                        foldBtn.disabled = false;
+                        foldBtn.textContent = '🚀 Lancer le repliement';
+                    }
+                } catch (error) {
+                    console.error('Erreur polling:', error);
+                }
+            }, 2000);
+        }
+        
+        // Charger les résultats
+        async function loadResults() {
+            try {
+                const response = await fetch(`${API_URL}/results/${currentJobId}`);
+                const data = await response.json();
+                
+                resultsList.innerHTML = '';
+                
+                const info = document.createElement('div');
+                info.className = 'result-item';
+                info.innerHTML = `
+                    <div>
+                        <strong>Séquence:</strong> ${data.sequence.substring(0, 40)}... (${data.sequence.length} aa)<br>
+                        <strong>pLDDT moyen:</strong> ${data.steps[0].avg_plddt.toFixed(2)}
+                    </div>
+                `;
+                resultsList.appendChild(info);
+                
+                data.steps.forEach(step => {
+                    const item = document.createElement('div');
+                    item.className = 'result-item';
+                    item.innerHTML = `
+                        <span>📄 Étape ${step.step + 1}/${data.steps.length}</span>
+                        <a href="${step.pdb_url}" download>Télécharger PDB</a>
+                    `;
+                    resultsList.appendChild(item);
+                });
+                
+                resultsDiv.classList.add('show');
+            } catch (error) {
+                console.error('Erreur chargement résultats:', error);
+            }
+        }
+        
+        function cleanSequence(seq) {
+            return seq.toUpperCase().replace(/\s+/g, '').replace(/\n/g, '');
+        }
+        
+        function isValid(seq) {
+            return /^[ACDEFGHIKLMNPQRSTVWY]+$/.test(seq);
+        }
+    </script>
+</body>
+</html>

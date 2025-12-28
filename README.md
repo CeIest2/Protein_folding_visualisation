@@ -11,45 +11,46 @@ An interactive web application for real-time protein structure prediction and vi
 
 ## 📋 Prerequisites
 
-* **System**: Windows 10/11 with **WSL2** installed (Ubuntu recommended)
-* **GPU**: NVIDIA graphics card with Windows drivers installed
-* **Python**: Version 3.10 or higher (within WSL)
+* **Python**: Version 3.10 or higher
+* **GPU** (recommended): NVIDIA graphics card with CUDA support for faster predictions
 
-## 🚀 Installation (WSL)
+## 🚀 Installation
 
-Open your WSL terminal, navigate to the project directory, and follow these steps:
-
-### 1. Create Virtual Environment
-
-Isolate project dependencies:
+### 1. Clone the Repository
 ```bash
-# Create environment named "venv"
-python3 -m venv venv
-
-# Activate the environment
-source venv/bin/activate
+git clone <repository-url>
+cd protein-folding-visualizer
 ```
 
-### 2. Install PyTorch (GPU Support)
+### 2. Create Virtual Environment
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-This is the most critical step. Install a version compatible with CUDA 12.x:
+### 3. Install PyTorch
+
+For GPU support (NVIDIA CUDA 12.x):
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 3. Install Project Dependencies
+For CPU only:
+```bash
+pip install torch torchvision torchaudio
+```
+
+### 4. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Verify GPU Access
+### 5. Verify Installation
 
-Check that PyTorch can detect your NVIDIA GPU:
+Check GPU availability (optional):
 ```bash
 python -c "import torch; print(torch.cuda.is_available())"
 ```
-
-Expected output: `True`
 
 ## 🎯 Usage
 
@@ -85,19 +86,19 @@ protein-folding-visualizer/
 ## 🔧 Troubleshooting
 
 **CUDA not available**
-- Verify NVIDIA drivers are installed on Windows
-- Ensure WSL2 has GPU passthrough enabled
+- Verify NVIDIA drivers are installed
 - Check CUDA version compatibility with PyTorch
+- The application will fall back to CPU if GPU is not available
 
 **Out of memory errors**
 - Try shorter sequences (< 400 amino acids)
 - Close other GPU-intensive applications
-- Reduce the number of recycles in the model configuration
+- Use CPU mode for very limited GPU memory
 
 **Slow predictions**
 - First prediction downloads the model (~700MB) and may take time
-- Subsequent predictions are much faster
-- Consider using a more powerful GPU for longer sequences
+- Subsequent predictions are faster as the model is cached
+- GPU acceleration significantly improves prediction speed
 
 ## 📚 Technologies
 

@@ -104,7 +104,7 @@ def run_folding(sequence: str, job_id: str, jobs_status: dict):
             "avg_plddt_global": float(plddt.mean()),
             "steps": []
         }
-        
+        jobs_status[job_id]["steps"] = []        
         # 3. Génération des fichiers PDB
         for recycle_idx in range(num_recycles):
             jobs_status[job_id]["progress"] = 3 + recycle_idx
@@ -115,12 +115,16 @@ def run_folding(sequence: str, job_id: str, jobs_status: dict):
             
             save_pdb_biopython(positions, pdb_path, sequence)
             
-            metadata["steps"].append({
+            step_data = {
                 "step": recycle_idx,
                 "pdb_file": pdb_filename,
                 "avg_plddt": float(plddt.mean()),
                 "plddt_per_residue": [round(float(x), 2) for x in plddt.tolist()]
-            })
+            }
+            
+            metadata["steps"].append(step_data)
+
+            jobs_status[job_id]["steps"].append(step_data)
             
         # 4. Sauvegarde
         with open(output_dir / "metadata.json", "w") as f:

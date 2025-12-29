@@ -49,7 +49,7 @@ class ProteinFoldingAPI {
     }
 
     /**
-     * Récupère les résultats d'un job complété
+     * Récupère les résultats d'un job complété (ou partiels)
      * @param {string} jobId - ID du job
      * @returns {Promise<{job_id: string, sequence: string, status: string, steps: Array}>}
      */
@@ -88,7 +88,10 @@ class ProteinFoldingAPI {
      * @returns {Promise<string>} - Contenu du fichier PDB
      */
     async fetchPDB(pdbUrl) {
-        const response = await fetch(pdbUrl);
+        // Si l'URL est relative, on ajoute l'origine si nécessaire, 
+        // sinon fetch le gère souvent bien. Ici on s'assure que c'est propre.
+        const url = pdbUrl.startsWith('http') ? pdbUrl : `http://localhost:8000${pdbUrl}`;
+        const response = await fetch(url);
         
         if (!response.ok) {
             throw new Error('Erreur lors du chargement du PDB');
@@ -100,7 +103,7 @@ class ProteinFoldingAPI {
     /**
      * Polling du statut jusqu'à complétion
      * @param {string} jobId - ID du job
-     * @param {Function} onProgress - Callback appelé à chaque mise à jour (optionnel)
+     * @param {Function} onProgress - Callback appelé à chaque mise à jour avec l'objet status
      * @param {number} interval - Intervalle en ms entre chaque requête (défaut: 2000)
      * @returns {Promise<Object>} - Statut final
      */
@@ -110,18 +113,17 @@ class ProteinFoldingAPI {
                 try {
                     const status = await this.getStatus(jobId);
                     
-                    // Appeler le callback si fourni
+                    // C'est ICI que la magie opère : on notifie l'extérieur
                     if (onProgress) {
                         onProgress(status);
                     }
 
-                    // Vérifier si le job est terminé
                     if (status.status === 'completed') {
                         resolve(status);
                     } else if (status.status === 'failed') {
                         reject(new Error(status.error || 'Le folding a échoué'));
                     } else {
-                        // Continuer le polling
+                        // On continue d'attendre
                         setTimeout(poll, interval);
                     }
                 } catch (error) {

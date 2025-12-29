@@ -184,17 +184,22 @@
             
             // On récupère le contenu du PDB
             // Note: on ajoute l'URL complète si besoin
-            const response = await fetch(`http://localhost:8000${pdbUrl}`);
-            const pdbData = await response.text();
+            try {
+                const response = await fetch(`http://localhost:8000${pdbUrl}`);
+                if (!response.ok) throw new Error("PDB non trouvé");
+                const pdbData = await response.text();
 
-            viewer.clear();
-            viewer.addModel(pdbData, "pdb");
-            viewer.setStyle({}, {cartoon: {color: 'spectrum'}});
-            viewer.zoomTo();
-            viewer.render();
+                viewer.clear();
+                viewer.addModel(pdbData, "pdb");
+                viewer.setStyle({}, {cartoon: {color: 'spectrum'}});
+                viewer.zoomTo();
+                viewer.render();
 
-            // Mise à jour UI
-            stepLabel.textContent = `Etape ${stepIndex + 1}/${jobResults.steps.length}`;
+                // Mise à jour UI
+                stepLabel.textContent = `Etape ${stepIndex + 1}/${jobResults.steps.length}`;
+            } catch (e) {
+                console.warn("Erreur chargement step", stepIndex, e);
+            }
         }
 
         // Gestion du Slider
@@ -290,11 +295,17 @@
                     progressFill.style.width = `${percent}%`;
                     progressText.textContent = `Étape ${status.progress}/${status.total_steps}`;
                     
+                    // --- MODE STREAMING ---
+                    // Si le job avance, on essaie de charger les résultats partiels
+                    if (status.progress > 0 && status.status !== 'failed') {
+                        await loadResults(true); // true = mode partiel
+                    }
+                    
                     if (status.status === 'completed') {
                         clearInterval(interval);
                         statusBadge.textContent = '✓ Terminé';
                         statusBadge.className = 'badge completed';
-                        loadResults();
+                        loadResults(false); // Chargement final complet
                     } else if (status.status === 'failed') {
                         clearInterval(interval);
                         statusBadge.textContent = '✗ Échec';
@@ -306,30 +317,49 @@
             }, 2000);
         }
         
-        async function loadResults() {
+        async function loadResults(isPartial = false) {
             try {
                 const response = await fetch(`${API_URL}/results/${currentJobId}`);
-                jobResults = await response.json();
+                if (!response.ok) {
+                    if (isPartial) return; // Si partiel et pas prêt, on ignore
+                    throw new Error("Résultats non trouvés");
+                }
+
+                const newResults = await response.json();
                 
-                // Préparer la visualisation
-                initViewer();
+                // Optimisation: si rien n'a changé, on ne redessine pas
+                if (isPartial && jobResults && jobResults.steps.length === newResults.steps.length) {
+                    return;
+                }
+
+                jobResults = newResults;
+                
+                // Préparer la visualisation (si pas encore fait)
+                if (!viewer) {
+                    initViewer();
+                }
                 viewerSection.classList.add('show');
                 
                 // Configurer le slider
                 stepSlider.max = jobResults.steps.length - 1;
                 stepSlider.value = jobResults.steps.length - 1; // Aller à la fin directement
                 
-                // Charger la structure finale
+                // Charger la structure la plus récente
                 loadStep(jobResults.steps.length - 1);
                 
-                // Réactiver le bouton
-                foldBtn.disabled = false;
-                foldBtn.textContent = '🚀 Lancer le repliement';
-                
-                // Scroller vers le viewer
-                setTimeout(() => viewerSection.scrollIntoView({behavior: 'smooth'}), 100);
+                // Logique de fin de traitement
+                if (!isPartial) {
+                    // Réactiver le bouton
+                    foldBtn.disabled = false;
+                    foldBtn.textContent = '🚀 Lancer le repliement';
+                    
+                    // Scroller vers le viewer (une seule fois à la fin)
+                    setTimeout(() => viewerSection.scrollIntoView({behavior: 'smooth'}), 100);
+                }
 
-            } catch (error) { console.error('Erreur résultats:', error); }
+            } catch (error) { 
+                if (!isPartial) console.error('Erreur résultats:', error); 
+            }
         }
         
         function cleanSequence(seq) { return seq.toUpperCase().replace(/[^A-Z]/g, ''); }

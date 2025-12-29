@@ -51,8 +51,25 @@ async def get_results(job_id: str):
     metadata_path = Path(f"data/outputs/{job_id}/metadata.json")
     
     if not metadata_path.exists():
-        if job_id in jobs_status and jobs_status[job_id]["status"] == "processing":
-            return {"job_id": job_id, "sequence": "", "status": "processing", "steps": None}
+        if job_id in jobs_status:
+            current_steps = jobs_status[job_id].get("steps", [])
+            
+            formatted_steps = [
+                {
+                    "step": s["step"],
+                    "pdb_url": f"/data/outputs/{job_id}/{s['pdb_file']}",
+                    "avg_plddt": s["avg_plddt"],
+                    "plddt_per_residue": s["plddt_per_residue"]
+                }
+                for s in current_steps
+            ]
+            return {
+                "job_id": job_id, 
+                "sequence": "",
+                "status": jobs_status[job_id]["status"], 
+                "steps": formatted_steps
+            }
+            
         raise HTTPException(status_code=404, detail="Résultats introuvables")
     
     with open(metadata_path, 'r') as f:

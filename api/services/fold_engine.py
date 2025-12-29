@@ -24,17 +24,22 @@ class FoldingEngine:
         if self.model is not None:
             return
 
-        print(f"🏗️ Chargement du modèle ESMFold sur {self.device}...")
+        print(f"🏗️ Chargement du modèle ESMFold (Standard FP16)...")
         try:
             model_name = "facebook/esmfold_v1"
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-            self.model = EsmForProteinFolding.from_pretrained(model_name, low_cpu_mem_usage=True)
             
-            if self.device == "cuda":
-                self.model = self.model.cuda().to(torch.bfloat16)
+            # On charge en FP16 pour économiser la VRAM (6 Go vs 12 Go)
+            self.model = EsmForProteinFolding.from_pretrained(
+                model_name, 
+                device_map="auto",
+                torch_dtype=torch.float16,
+                low_cpu_mem_usage=True
+            )
             
             self.model.eval()
-            print("✅ Modèle chargé et prêt.")
+            print("✅ Modèle chargé en FP16.")
+            
         except Exception as e:
             print(f"❌ Erreur critique lors du chargement du modèle : {e}")
             raise e
@@ -46,7 +51,7 @@ class FoldingEngine:
             del self.tokenizer
             self.model = None
             self.tokenizer = None
-            if self.device == "cuda":
+            if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             gc.collect()
 
@@ -56,10 +61,17 @@ class FoldingEngine:
 
         with torch.no_grad():
             inputs = self.tokenizer([sequence], return_tensors="pt", add_special_tokens=False)
-            if self.device == "cuda":
-                inputs = {key: val.cuda() for key, val in inputs.items()}
             
-            return self.model(**inputs)
+            if torch.cuda.is_available():
+                device = next(self.model.parameters()).device
+                inputs = {key: val.to(device) for key, val in inputs.items()}
+                
+                # --- CORRECTIF : AUTOCAST ---
+                # Permet de mélanger Float16 (modèle) et Float32 (calculs internes)
+                with torch.amp.autocast("cuda"):
+                    return self.model(**inputs)
+            else:
+                return self.model(**inputs)
 
 # Instance globale
 engine = FoldingEngine()
@@ -78,9 +90,8 @@ def run_folding(sequence: str, job_id: str, jobs_status: dict):
         jobs_status[job_id]["progress"] = 2
         
         # 2. Extraction des données
+        # On repasse en float32 pour l'export Numpy pour éviter tout souci
         positions_all = outputs.positions.detach().float().cpu().numpy()
-        
-        # CORRECTION ICI : Ajout de .flatten() pour garantir une liste 1D
         plddt = outputs.plddt[0].detach().float().cpu().numpy().flatten()
         
         num_recycles = positions_all.shape[0]
@@ -108,7 +119,6 @@ def run_folding(sequence: str, job_id: str, jobs_status: dict):
                 "step": recycle_idx,
                 "pdb_file": pdb_filename,
                 "avg_plddt": float(plddt.mean()),
-                # Le .flatten() plus haut garantit que x est un float
                 "plddt_per_residue": [round(float(x), 2) for x in plddt.tolist()]
             })
             

@@ -1,15 +1,14 @@
-# FastAPI et serveur
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
-python-multipart==0.0.6
+# FastAPI and server
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+# Cuda, we can use to newly version du to bug in quantization in 4-bits for ESM models
+transformers==4.39.3
+accelerate==0.28.0
+# Utilities
+numpy
+biopython
+python-dotenv
+bitsandbytes
 
-# PyTorch avec CUDA (version agnostique qui s'adapte)
-transformers==4.37.0
-accelerate==0.26.1
-
-
-# Utilitaires
-numpy>=1.24.3
-biopython>=1.83
-python-dotenv>=1.0.0

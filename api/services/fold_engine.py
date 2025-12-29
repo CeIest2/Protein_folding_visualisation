@@ -1,4 +1,3 @@
-# api/services/fold_engine.py
 import torch
 from transformers import AutoTokenizer, EsmForProteinFolding
 from api.config import MODEL_NAME
@@ -9,16 +8,16 @@ class FoldingEngine:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(FoldingEngine, cls).__new__(cls)
-            cls._instance.model = None
+            cls._instance           = super(FoldingEngine, cls).__new__(cls)
+            cls._instance.model     = None
             cls._instance.tokenizer = None
         return cls._instance
 
     def load(self):
         if self.model: return
-        print(f"🏗️ Chargement de {MODEL_NAME}...")
+        print(f"Chargement de {MODEL_NAME}...")
         self.tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        self.model = EsmForProteinFolding.from_pretrained(
+        self.model     = EsmForProteinFolding.from_pretrained(
             MODEL_NAME, 
             device_map="auto", 
             torch_dtype=torch.float16, 
@@ -43,5 +42,4 @@ class FoldingEngine:
                     return self.model(**inputs)
             return self.model(**inputs)
 
-# Instance globale
 engine = FoldingEngine()

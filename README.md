@@ -1,20 +1,20 @@
-# 🧬 Protein Folding Visualizer
+# Protein Folding Visualizer
 
 An interactive web application for real-time protein structure prediction and visualization. It leverages **ESMFold** AI (Meta AI) to generate 3D structures and **3Dmol.js** for in-browser visualization.
 
-## ✨ Features
+##  Features
 
 * **AI-Powered Prediction**: Generate PDB structures from amino acid sequences using ESMFold
 * **Interactive 3D Visualization**: Rotate, zoom, and explore protein structures in real-time
 * **Folding Animation**: Watch proteins fold step-by-step through the model's "recycle" iterations
 * **Intuitive Controls**: Interactive slider with automatic playback (Play/Pause)
 
-## 📋 Prerequisites
+##  Prerequisites
 
 * **Python**: Version 3.10 or higher
 * **GPU** (recommended): NVIDIA graphics card with CUDA support for faster predictions
 
-## 🚀 Installation
+##  Installation
 
 ### 1. Clone the Repository
 ```bash
@@ -52,11 +52,11 @@ Check GPU availability (optional):
 python -c "import torch; print(torch.cuda.is_available())"
 ```
 
-## 🎯 Usage
+##  Usage
 
 ### Start the Application
 ```bash
-python app.py
+uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
 The server will start at `http://localhost:5000`
@@ -71,7 +71,6 @@ The server will start at `http://localhost:5000`
 ## 📁 Project Structure
 ```
 protein-folding-visualizer/
-├── app.py                 # Flask backend server
 ├── requirements.txt       # Python dependencies
 ├── templates/
 │   └── index.html        # Frontend interface
@@ -83,35 +82,11 @@ protein-folding-visualizer/
 └── README.md             # This file
 ```
 
-## 🔧 Troubleshooting
 
-**CUDA not available**
-- Verify NVIDIA drivers are installed
-- Check CUDA version compatibility with PyTorch
-- The application will fall back to CPU if GPU is not available
 
-**Out of memory errors**
-- Try shorter sequences (< 400 amino acids)
-- Close other GPU-intensive applications
-- Use CPU mode for very limited GPU memory
-
-**Slow predictions**
-- First prediction downloads the model (~700MB) and may take time
-- Subsequent predictions are faster as the model is cached
-- GPU acceleration significantly improves prediction speed
-
-## 📚 Technologies
+##  Technologies
 
 * **Backend**: Flask (Python)
 * **AI Model**: ESMFold (Meta AI)
 * **3D Rendering**: 3Dmol.js
 * **Deep Learning**: PyTorch with CUDA support
-
-## 📝 License
-
-This project is provided as-is for educational and research purposes.
-
-## 🙏 Acknowledgments
-
-* Meta AI for the ESMFold model
-* 3Dmol.js team for the visualization library

@@ -1,52 +1,44 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from contextlib import asynccontextmanager # Nouvel import
+from contextlib import asynccontextmanager
+from pathlib import Path
 import os
 
 from api.routes.folding import router as folding_router
-from api.services.fold_engine import engine # Import du singleton
+from api.services.fold_engine import engine
 
-# Gestion du cycle de vie (Démarrage / Arrêt)
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+DATA_DIR = BASE_DIR / "data"
+WEBAPP_DIR = BASE_DIR / "webapp"
+
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Au démarrage : on pré-charge le modèle
+    # Démarrage
     engine.load()
     yield
-    # À l'arrêt : on nettoie la mémoire
+    # Arrêt
     engine.unload()
 
-app = FastAPI(
-    title="Protein Folding Visualization API",
-    description="API pour la prédiction et visualisation du repliement protéique avec ESMFold",
-    version="1.0.0",
-    lifespan=lifespan # Ajout du lifespan ici
-)
+app = FastAPI(title="Protein Folding API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
-app.mount("/css", StaticFiles(directory="webapp/css"), name="css")
-app.mount("/js", StaticFiles(directory="webapp/js"), name="js")
-app.mount("/data", StaticFiles(directory="data"), name="data")
 
 app.include_router(folding_router, prefix="/api", tags=["folding"])
 
-@app.get("/")
-async def root():
-    return FileResponse("webapp/index.html")
 
-@app.get("/health")
-async def health_check():
-    import torch # Import propre
-    return {
-        "status": "healthy",
-        "cuda_available": torch.cuda.is_available()
-    }
+app.mount("/data", StaticFiles(directory=str(DATA_DIR)), name="data")
+
+if not WEBAPP_DIR.exists():
+    raise RuntimeError(f"❌ Le dossier webapp est introuvable ici : {WEBAPP_DIR}")
+
+app.mount("/", StaticFiles(directory=str(WEBAPP_DIR), html=True), name="webapp")

@@ -1,6 +1,7 @@
 # Données générées
 data/outputs/*
 !data/outputs/.gitkeep
+*.png
 
 # Python
 __pycache__/
@@ -14,8 +15,6 @@ venv/
 ENV/
 .venv
 
-# Docker
-*.log
 
 # IDE
 .vscode/

@@ -1,88 +1,92 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field, field_validator
+# api/routes/folding.py
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, Field
 import uuid
-from pathlib import Path
 import json
+import traceback
+from pathlib import Path
 
-from api.services.fold_engine import run_folding
+from api.config import OUTPUT_DIR
+from api.services.fold_engine import engine
+from api.utils.pdb import save_pdb
 
 router = APIRouter()
 
 class FoldRequest(BaseModel):
     sequence: str = Field(..., min_length=10, max_length=1000)
-    job_id: str | None = None
-    
-    @field_validator('sequence')
-    def validate_sequence(cls, v):
-        v = v.upper().replace(" ", "").replace("\n", "")
-        valid_aa = set("ACDEFGHIKLMNPQRSTVWY")
-        if not all(char in valid_aa for char in v):
-            raise ValueError("Séquence invalide")
-        return v
 
-jobs_status = {}
+# --- LA NOUVELLE FONCTION RUN_FOLDING (Déplacée ici) ---
+def process_folding_job(job_id: str, sequence: str):
+    job_dir = OUTPUT_DIR / job_id
+    status_file = job_dir / "status.json"
+    
+    try:
+        # 1. Ecrire que ça démarre
+        status_data = {"status": "processing", "progress": 0, "total_steps": 0}
+        with open(status_file, "w") as f: json.dump(status_data, f)
+
+        # 2. IA
+        outputs = engine.predict(sequence)
+        
+        # 3. Traitement
+        positions_all = outputs.positions.detach().float().cpu().numpy()
+        plddt = outputs.plddt[0].detach().float().cpu().numpy().flatten()
+        num_recycles = positions_all.shape[0]
+        
+        steps = []
+        for i in range(num_recycles):
+            # Mise à jour progression
+            status_data.update({"progress": i + 1, "total_steps": num_recycles})
+            with open(status_file, "w") as f: json.dump(status_data, f)
+            
+            # Sauvegarde PDB (Appel à notre nouveau fichier utils)
+            pdb_name = f"step_{i}.pdb"
+            save_pdb(positions_all[i, 0], job_dir / pdb_name, sequence)
+            
+            steps.append({
+                "step": i, "pdb_url": f"/data/outputs/{job_id}/{pdb_name}",
+                "avg_plddt": float(plddt.mean())
+            })
+
+        # 4. Finalisation (metadata.json = Job fini)
+        final_meta = {
+            "job_id": job_id, "sequence": sequence, 
+            "status": "completed", "steps": steps
+        }
+        with open(job_dir / "metadata.json", "w") as f: json.dump(final_meta, f)
+        
+        # On supprime le status temporaire
+        status_file.unlink(missing_ok=True)
+        
+    except Exception as e:
+        traceback.print_exc()
+        with open(status_file, "w") as f:
+            json.dump({"status": "failed", "error": str(e)}, f)
+
+# --- ROUTES ---
 
 @router.post("/fold")
-async def fold_protein(request: FoldRequest, background_tasks: BackgroundTasks):
-    job_id = request.job_id or str(uuid.uuid4())[:8]
-    output_dir = Path(f"data/outputs/{job_id}")
+async def fold_protein(request: FoldRequest, tasks: BackgroundTasks):
+    job_id = str(uuid.uuid4())[:8]
+    (OUTPUT_DIR / job_id).mkdir(parents=True, exist_ok=True)
     
-    if output_dir.exists():
-        return {"job_id": job_id, "status": "exists", "message": "Job existe déjà"}
-    
-    jobs_status[job_id] = {"status": "processing", "progress": 0, "total_steps": 8}
-    background_tasks.add_task(run_folding, request.sequence, job_id, jobs_status)
-    
-    return {"job_id": job_id, "status": "processing", "message": "Folding démarré"}
+    tasks.add_task(process_folding_job, job_id, request.sequence)
+    return {"job_id": job_id, "status": "processing"}
 
 @router.get("/status/{job_id}")
 async def get_status(job_id: str):
-    if job_id in jobs_status:
-        return {"job_id": job_id, **jobs_status[job_id]}
+    job_dir = OUTPUT_DIR / job_id
     
-    metadata_path = Path(f"data/outputs/{job_id}/metadata.json")
-    if metadata_path.exists():
-        return {"job_id": job_id, "status": "completed", "progress": 8, "total_steps": 8}
-    
-    raise HTTPException(status_code=404, detail="Job introuvable")
+    # 1. Si fini (metadata.json existe)
+    if (job_dir / "metadata.json").exists():
+        with open(job_dir / "metadata.json") as f: return json.load(f)
+        
+    # 2. Si en cours (status.json existe)
+    if (job_dir / "status.json").exists():
+        with open(job_dir / "status.json") as f: return {"job_id": job_id, **json.load(f)}
+        
+    raise HTTPException(404, "Job introuvable")
 
 @router.get("/results/{job_id}")
 async def get_results(job_id: str):
-    metadata_path = Path(f"data/outputs/{job_id}/metadata.json")
-    
-    if not metadata_path.exists():
-        if job_id in jobs_status:
-            current_steps = jobs_status[job_id].get("steps", [])
-            
-            formatted_steps = [
-                {
-                    "step": s["step"],
-                    "pdb_url": f"/data/outputs/{job_id}/{s['pdb_file']}",
-                    "avg_plddt": s["avg_plddt"],
-                    "plddt_per_residue": s["plddt_per_residue"]
-                }
-                for s in current_steps
-            ]
-            return {
-                "job_id": job_id, 
-                "sequence": "",
-                "status": jobs_status[job_id]["status"], 
-                "steps": formatted_steps
-            }
-            
-        raise HTTPException(status_code=404, detail="Résultats introuvables")
-    
-    with open(metadata_path, 'r') as f:
-        metadata = json.load(f)
-    
-    steps = [
-        {
-            "step": s["step"],
-            "pdb_url": f"/data/outputs/{job_id}/{s['pdb_file']}",
-            "avg_plddt": s["avg_plddt"],
-            "plddt_per_residue": s["plddt_per_residue"]
-        }
-        for s in metadata["steps"]
-    ]
-    
-    return {"job_id": job_id, "sequence": metadata["sequence"], "status": "completed", "steps": steps}
+    return await get_status(job_id) # Même logique maintenant

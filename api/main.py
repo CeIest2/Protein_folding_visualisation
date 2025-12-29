@@ -5,11 +5,21 @@ from fastapi.responses import FileResponse
 import os
 
 from api.routes.folding import router as folding_router
+from contextlib import asynccontextmanager
+from api.services.fold_engine import engine
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    engine.load()
+    yield
+    # À l'arrêt : on nettoie
+    engine.unload()
 
 app = FastAPI(
     title="Protein Folding Visualization API",
     description="API pour la prédiction et visualisation du repliement protéique avec ESMFold",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(

@@ -2,179 +2,188 @@
  * Application principale - Gestion de l'interface utilisateur
  */
 
-// Éléments du DOM
-const sequenceInput = document.getElementById('sequenceInput');
-const seqLengthDisplay = document.getElementById('seqLength');
-const seqValidDisplay = document.getElementById('seqValid');
+// --- 1. SÉLECTION DES ÉLÉMENTS DU DOM ---
+// On utilise les IDs définis dans ton nouveau index.html
+const sequenceInput = document.getElementById('sequence');      
+const seqLengthDisplay = document.getElementById('length');     
+const seqValidDisplay = document.getElementById('valid');       
 const foldBtn = document.getElementById('foldBtn');
-const statusSection = document.getElementById('statusSection');
-const resultsSection = document.getElementById('resultsSection');
-const jobIdDisplay = document.getElementById('jobIdDisplay');
+
+const statusCard = document.getElementById('statusCard');       
+const viewerSection = document.getElementById('viewerSection'); 
+const jobIdDisplay = document.getElementById('jobId');          
 const statusBadge = document.getElementById('statusBadge');
 const progressFill = document.getElementById('progressFill');
 const progressText = document.getElementById('progressText');
-const resultsList = document.getElementById('resultsList');
 
-// État de l'application
+// Contrôles du visualiseur 3D
+const stepSlider = document.getElementById('stepSlider');
+const stepLabel = document.getElementById('stepLabel');
+const playBtn = document.getElementById('playBtn');
+
+// --- 2. ÉTAT DE L'APPLICATION ---
 let currentJobId = null;
+let viewer = null;      // Instance 3Dmol
+let jobResults = null;  // Données du job
+let isPlaying = false;  // État de l'animation
 
-// Validation de la séquence en temps réel
+// --- 3. LOGIQUE DE VALIDATION ---
 sequenceInput.addEventListener('input', () => {
     const sequence = cleanSequence(sequenceInput.value);
     const length = sequence.length;
     
     seqLengthDisplay.textContent = `Longueur: ${length} aa`;
     
-    // Validation
     const isValid = validateSequence(sequence);
     
     if (length === 0) {
         seqValidDisplay.textContent = '';
-        seqValidDisplay.className = 'status-badge';
+        seqValidDisplay.className = 'badge';
         foldBtn.disabled = true;
     } else if (isValid && length >= 10 && length <= 1000) {
-        seqValidDisplay.textContent = '✓ Séquence valide';
-        seqValidDisplay.className = 'status-badge valid';
+        seqValidDisplay.textContent = '✓ Valide';
+        seqValidDisplay.className = 'badge valid';
         foldBtn.disabled = false;
     } else {
-        if (length < 10) {
-            seqValidDisplay.textContent = '⚠ Trop court (min: 10 aa)';
-        } else if (length > 1000) {
-            seqValidDisplay.textContent = '⚠ Trop long (max: 1000 aa)';
-        } else {
-            seqValidDisplay.textContent = '✗ Caractères invalides';
-        }
-        seqValidDisplay.className = 'status-badge invalid';
+        seqValidDisplay.textContent = '✗ Invalide';
+        seqValidDisplay.className = 'badge invalid';
         foldBtn.disabled = true;
     }
 });
 
-// Bouton de lancement du folding
+// --- 4. LANCEMENT DU FOLDING ---
 foldBtn.addEventListener('click', async () => {
     const sequence = cleanSequence(sequenceInput.value);
     
-    if (!validateSequence(sequence)) {
-        alert('Séquence invalide !');
-        return;
-    }
-    
-    // Désactiver le bouton
+    // Reset UI
     foldBtn.disabled = true;
-    foldBtn.innerHTML = '<span class="loading"></span> Lancement...';
+    foldBtn.textContent = '⏳ Lancement...';
+    viewerSection.classList.remove('show'); 
+    statusCard.classList.add('show');       
     
     try {
-        // Lancer le folding
+        // Appel API
         const response = await apiClient.foldProtein(sequence);
         currentJobId = response.job_id;
         
-        // Afficher la section de statut
-        statusSection.style.display = 'block';
+        // Mise à jour Status
         jobIdDisplay.textContent = currentJobId;
-        statusBadge.textContent = 'En traitement';
-        statusBadge.className = 'status-badge processing';
+        statusBadge.textContent = 'En cours';
+        statusBadge.className = 'badge processing';
         
-        // Scroller vers la section de statut
-        statusSection.scrollIntoView({ behavior: 'smooth' });
-        
-        // Démarrer le polling
+        // Démarrer le polling (vérification régulière)
         await apiClient.pollStatus(currentJobId, updateProgress);
         
-        // Une fois complété, charger les résultats
+        // Une fois fini, on charge tout
         await loadResults(currentJobId);
         
     } catch (error) {
-        console.error('Erreur:', error);
-        alert(`Erreur: ${error.message}`);
-        
+        console.error(error);
         statusBadge.textContent = 'Échec';
-        statusBadge.className = 'status-badge failed';
-    } finally {
-        // Réactiver le bouton
+        statusBadge.className = 'badge invalid';
         foldBtn.disabled = false;
-        foldBtn.innerHTML = '<span class="btn-text">🚀 Lancer le repliement</span>';
+        foldBtn.textContent = '🚀 Lancer le repliement';
+        alert("Erreur: " + error.message);
     }
 });
 
-/**
- * Met à jour l'interface avec la progression
- */
 function updateProgress(status) {
     const percent = (status.progress / status.total_steps) * 100;
     progressFill.style.width = `${percent}%`;
-    progressText.textContent = `Étape ${status.progress}/${status.total_steps} - Calcul en cours...`;
-    
-    console.log(`📊 Progression: ${status.progress}/${status.total_steps}`);
+    progressText.textContent = `Étape ${status.progress}/${status.total_steps}`;
 }
 
-/**
- * Charge et affiche les résultats
- */
+// --- 5. GESTION DES RÉSULTATS & VISUALISATION ---
 async function loadResults(jobId) {
     try {
         const results = await apiClient.getResults(jobId);
+        jobResults = results;
         
-        // Mettre à jour le statut
-        statusBadge.textContent = '✓ Complété';
-        statusBadge.className = 'status-badge completed';
-        progressFill.style.width = '100%';
-        progressText.textContent = `✅ Folding terminé ! ${results.steps.length} étapes générées.`;
+        statusBadge.textContent = '✓ Terminé';
+        statusBadge.className = 'badge completed';
         
-        // Afficher la section de résultats
-        resultsSection.style.display = 'block';
-        resultsSection.scrollIntoView({ behavior: 'smooth' });
+        // Initialiser le visualiseur 3Dmol s'il n'existe pas encore
+        if (!viewer) {
+            viewer = $3Dmol.createViewer(document.getElementById('mol-viewer'), {
+                backgroundColor: 'white'
+            });
+        }
         
-        // Afficher la liste des fichiers générés
-        displayResults(results);
+        viewerSection.classList.add('show');
+        
+        // Configurer le slider pour naviguer dans les étapes
+        stepSlider.max = results.steps.length - 1;
+        stepSlider.value = results.steps.length - 1;
+        
+        // Charger la dernière étape (structure finale)
+        loadStep(results.steps.length - 1);
+        
+        // Réactiver le bouton
+        foldBtn.disabled = false;
+        foldBtn.textContent = '🚀 Lancer le repliement';
+        
+        // Scroll vers le bas pour voir le résultat
+        viewerSection.scrollIntoView({ behavior: 'smooth' });
         
     } catch (error) {
-        console.error('Erreur chargement résultats:', error);
-        alert(`Erreur lors du chargement des résultats: ${error.message}`);
+        console.error("Erreur chargement résultats", error);
     }
 }
 
-/**
- * Affiche la liste des résultats
- */
-function displayResults(results) {
-    resultsList.innerHTML = '';
+// Charge une étape spécifique dans le visualiseur
+async function loadStep(index) {
+    if (!jobResults) return;
     
-    const infoCard = document.createElement('div');
-    infoCard.className = 'result-item';
-    infoCard.innerHTML = `
-        <div>
-            <strong>Séquence:</strong> ${results.sequence.substring(0, 50)}... (${results.sequence.length} aa)<br>
-            <strong>pLDDT moyen:</strong> ${results.steps[0].avg_plddt.toFixed(2)}
-        </div>
-    `;
-    resultsList.appendChild(infoCard);
+    const step = jobResults.steps[index];
+    stepLabel.textContent = `Etape ${index + 1}/${jobResults.steps.length}`;
     
-    // Liste des fichiers PDB
-    results.steps.forEach(step => {
-        const item = document.createElement('div');
-        item.className = 'result-item';
-        item.innerHTML = `
-            <span>📄 Étape ${step.step + 1}/${results.steps.length}</span>
-            <a href="${step.pdb_url}" target="_blank" download>Télécharger PDB</a>
-        `;
-        resultsList.appendChild(item);
-    });
+    try {
+        // Récupère le contenu du fichier PDB via l'API
+        const pdbData = await apiClient.fetchPDB(step.pdb_url);
+        
+        viewer.clear();
+        viewer.addModel(pdbData, "pdb");
+        viewer.setStyle({}, {cartoon: {color: 'spectrum'}});
+        viewer.zoomTo();
+        viewer.render();
+    } catch (e) {
+        console.error("Erreur affichage PDB", e);
+    }
 }
 
-/**
- * Nettoie une séquence (enlève espaces, retours à la ligne, etc.)
- */
-function cleanSequence(seq) {
-    return seq.toUpperCase().replace(/\s+/g, '').replace(/\n/g, '');
+// --- 6. CONTRÔLES DU PLAYER (Slider & Play) ---
+stepSlider.addEventListener('input', (e) => {
+    // Si on bouge le slider manuellement, on arrête l'animation auto
+    isPlaying = false; 
+    playBtn.textContent = '▶';
+    loadStep(parseInt(e.target.value));
+});
+
+playBtn.addEventListener('click', () => {
+    isPlaying = !isPlaying;
+    playBtn.textContent = isPlaying ? '⏸' : '▶';
+    if (isPlaying) animate();
+});
+
+function animate() {
+    if (!isPlaying) return;
+    
+    let next = parseInt(stepSlider.value) + 1;
+    if (next >= jobResults.steps.length) next = 0; // Boucle au début
+    
+    stepSlider.value = next;
+    loadStep(next);
+    
+    setTimeout(animate, 500); // Vitesse de l'animation (500ms)
 }
 
-/**
- * Valide qu'une séquence ne contient que des acides aminés valides
- */
-function validateSequence(seq) {
-    const validAA = 'ACDEFGHIKLMNPQRSTVWY';
-    return seq.split('').every(char => validAA.includes(char));
+// --- 7. UTILITAIRES ---
+function cleanSequence(seq) { 
+    return seq.toUpperCase().replace(/[^A-Z]/g, ''); 
 }
 
-// Message de bienvenue dans la console
-console.log('🧬 Protein Folding Visualizer - Ready!');
-console.log('API Base URL:', 'http://localhost:8000/api');
+function validateSequence(seq) { 
+    return /^[ACDEFGHIKLMNPQRSTVWY]+$/.test(seq); 
+}
+
+console.log('🧬 App JS loaded & linked to DOM');

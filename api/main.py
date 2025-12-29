@@ -33,6 +33,8 @@ app.add_middleware(
 )
 
 app.mount("/webapp", StaticFiles(directory="webapp"), name="webapp")
+app.mount("/css", StaticFiles(directory="webapp/css"), name="css")
+app.mount("/js", StaticFiles(directory="webapp/js"), name="js")
 app.mount("/data", StaticFiles(directory="data"), name="data")
 
 app.include_router(folding_router, prefix="/api", tags=["folding"])
